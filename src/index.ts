@@ -61,7 +61,7 @@ export async function build(options: BuildOptions) {
   console.log(`GraalVM installed at: ${graalHome}`);
 
   console.log('Building native image...');
-  const nativeBinaryPath = await buildProjectNative(workPath, graalHome, buildSystem);
+  const nativeBinaryPath = await buildProjectNative(workPath, graalHome, buildSystem, writableDir);
   console.log(`Native binary: ${nativeBinaryPath}`);
 
   const nativeBinaryName = 'spring-app.bin';

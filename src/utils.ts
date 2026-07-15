@@ -105,7 +105,48 @@ export function ensureExecutable(workPath: string): void {
   }
 }
 
-export async function buildNativeImageMaven(workPath: string, graalHome: string): Promise<string> {
+export async function downloadMaven(destDir: string): Promise<string> {
+  const url = 'https://dlcdn.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz';
+  console.log(`Downloading Maven from ${url}`);
+  const mavenDir = join(destDir, 'maven');
+  mkdirSync(mavenDir, { recursive: true });
+  const tarballPath = join(destDir, 'maven.tar.gz');
+
+  const response = await fetch(url);
+  if (!response.ok || !response.body) throw new Error(`Failed to download Maven: ${response.status}`);
+
+  const fileStream = createWriteStream(tarballPath);
+  const reader = response.body.getReader();
+  while (true) { const { done, value } = await reader.read(); if (done) break; fileStream.write(value); }
+  fileStream.end();
+  await new Promise<void>((resolve, reject) => { fileStream.on('finish', resolve); fileStream.on('error', reject); });
+
+  const tar = require('tar');
+  await tar.extract({ file: tarballPath, cwd: mavenDir, strip: 1 });
+  return mavenDir;
+}
+
+export async function downloadGradle(destDir: string): Promise<string> {
+  const url = 'https://services.gradle.org/distributions/gradle-8.10-bin.zip';
+  console.log(`Downloading Gradle from ${url}`);
+  const gradleDir = join(destDir, 'gradle');
+  mkdirSync(gradleDir, { recursive: true });
+  const zipPath = join(destDir, 'gradle.zip');
+
+  const response = await fetch(url);
+  if (!response.ok || !response.body) throw new Error(`Failed to download Gradle: ${response.status}`);
+
+  const fileStream = createWriteStream(zipPath);
+  const reader = response.body.getReader();
+  while (true) { const { done, value } = await reader.read(); if (done) break; fileStream.write(value); }
+  fileStream.end();
+  await new Promise<void>((resolve, reject) => { fileStream.on('finish', resolve); fileStream.on('error', reject); });
+
+  execSync(`unzip -o "${zipPath}" -d "${gradleDir}"`, { stdio: 'inherit' });
+  return join(gradleDir, 'gradle-8.10');
+}
+
+export async function buildNativeImageMaven(workPath: string, graalHome: string, buildDir?: string): Promise<string> {
   const env = {
     ...process.env,
     JAVA_HOME: graalHome,
@@ -114,10 +155,16 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string)
   } as Record<string, string>;
 
   const mvnw = join(workPath, 'mvnw');
-  const mvnCmd = existsSync(mvnw) ? `"${mvnw}"` : 'mvn';
+  let mvnCmd: string;
+  if (existsSync(mvnw)) {
+    mvnCmd = `"${mvnw}"`;
+  } else {
+    const mavenHome = await downloadMaven(buildDir || require('os').tmpdir());
+    mvnCmd = join(mavenHome, 'bin', 'mvn');
+  }
 
   console.log('Building Spring Boot native image with Maven...');
-  execSync(`${mvnCmd} -Pnative native:compile -DskipTests`, {
+  execSync(`"${mvnCmd}" -Pnative native:compile -DskipTests`, {
     cwd: workPath,
     env,
     stdio: 'inherit',
@@ -135,7 +182,7 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string)
   throw new Error('Native binary not found in target/ directory');
 }
 
-export async function buildNativeImageGradle(workPath: string, graalHome: string): Promise<string> {
+export async function buildNativeImageGradle(workPath: string, graalHome: string, buildDir?: string): Promise<string> {
   const env = {
     ...process.env,
     JAVA_HOME: graalHome,
@@ -144,10 +191,16 @@ export async function buildNativeImageGradle(workPath: string, graalHome: string
   } as Record<string, string>;
 
   const gradlew = join(workPath, 'gradlew');
-  const gradleCmd = existsSync(gradlew) ? `"${gradlew}"` : 'gradle';
+  let gradleCmd: string;
+  if (existsSync(gradlew)) {
+    gradleCmd = `"${gradlew}"`;
+  } else {
+    const gradleHome = await downloadGradle(buildDir || require('os').tmpdir());
+    gradleCmd = join(gradleHome, 'bin', 'gradle');
+  }
 
   console.log('Building Spring Boot native image with Gradle...');
-  execSync(`${gradleCmd} nativeCompile -x test`, {
+  execSync(`"${gradleCmd}" nativeCompile -x test`, {
     cwd: workPath,
     env,
     stdio: 'inherit',
@@ -169,9 +222,9 @@ export function readLauncherSource(): string {
   return fs.readFileSync(launcherPath, 'utf-8');
 }
 
-export async function buildProjectNative(workPath: string, graalHome: string, buildSystem: BuildSystem): Promise<string> {
+export async function buildProjectNative(workPath: string, graalHome: string, buildSystem: BuildSystem, buildDir?: string): Promise<string> {
   if (buildSystem === 'maven') {
-    return buildNativeImageMaven(workPath, graalHome);
+    return buildNativeImageMaven(workPath, graalHome, buildDir);
   }
-  return buildNativeImageGradle(workPath, graalHome);
+  return buildNativeImageGradle(workPath, graalHome, buildDir);
 }
