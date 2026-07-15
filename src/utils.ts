@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, mkdirSync } from 'fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import { execSync } from 'child_process';
@@ -222,7 +222,34 @@ export function readLauncherSource(): string {
   return fs.readFileSync(launcherPath, 'utf-8');
 }
 
+function detectH2Dependency(workPath: string): boolean {
+  const pomXml = join(workPath, 'pom.xml');
+  if (existsSync(pomXml)) {
+    const content = readFileSync(pomXml, 'utf-8');
+    if (/<artifactId>h2<\/artifactId>/.test(content)) return true;
+  }
+  for (const name of ['build.gradle', 'build.gradle.kts']) {
+    const gp = join(workPath, name);
+    if (existsSync(gp)) {
+      const content = readFileSync(gp, 'utf-8');
+      if (/['"]h2['"]/.test(content)) return true;
+    }
+  }
+  return false;
+}
+
+function writeH2NativeImageExclude(workPath: string): void {
+  const dir = join(workPath, 'src', 'main', 'resources', 'META-INF', 'native-image', 'vercel-spring-h2-exclude');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, 'native-image.properties');
+  writeFileSync(file, 'Args = --exclude-config=.*h2.*,META-INF/native-image/.*\n');
+  console.log('H2 detected: added native-image exclude config at', file);
+}
+
 export async function buildProjectNative(workPath: string, graalHome: string, buildSystem: BuildSystem, buildDir?: string): Promise<string> {
+  if (detectH2Dependency(workPath)) {
+    writeH2NativeImageExclude(workPath);
+  }
   if (buildSystem === 'maven') {
     return buildNativeImageMaven(workPath, graalHome, buildDir);
   }
