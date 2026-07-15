@@ -61,7 +61,7 @@ my-spring-app/
 {
   "functions": {
     "api/index.java": {
-      "runtime": "vercel-spring@0.1.5",
+      "runtime": "vercel-spring@0.1.7",
       "memory": 3008,
       "maxDuration": 30
     }

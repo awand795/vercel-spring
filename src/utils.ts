@@ -163,10 +163,11 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string,
     mvnCmd = join(mavenHome, 'bin', 'mvn');
   }
 
+  const nativeArgs = '--gc=G1 -J-Xmx2g --parallelism=2 --enable-url-protocols=http -H:+ReportExceptionStackTraces';
   console.log('Building Spring Boot native image with Maven...');
   console.log('This may take 5-15 minutes depending on project size and Vercel build resources.');
   try {
-    execSync(`"${mvnCmd}" -Pnative native:compile -DskipTests`, {
+    execSync(`"${mvnCmd}" -Pnative native:compile -DskipTests "-Dnative.build.args=${nativeArgs}"`, {
       cwd: workPath,
       env,
       stdio: 'inherit',
@@ -176,6 +177,7 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string,
     console.error('Maven native build failed. Common causes:');
     console.error('  - Out of memory (add --gc=G1 -J-Xmx3g to native-image args)');
     console.error('  - Build timeout (try simplifying your project or increasing timeout)');
+    console.error('  - Check your pom.xml native profile configuration');
     throw new Error(`Maven native build failed: ${err.message || err}`);
   }
 
@@ -272,12 +274,12 @@ function writePerformanceNativeImageConfig(workPath: string): void {
 }
 
 export async function buildProjectNative(workPath: string, graalHome: string, buildSystem: BuildSystem, buildDir?: string): Promise<string> {
-  writePerformanceNativeImageConfig(workPath);
   if (detectH2Dependency(workPath)) {
     writeH2NativeImageExclude(workPath);
   }
   if (buildSystem === 'maven') {
     return buildNativeImageMaven(workPath, graalHome, buildDir);
   }
+  writePerformanceNativeImageConfig(workPath);
   return buildNativeImageGradle(workPath, graalHome, buildDir);
 }
