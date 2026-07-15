@@ -106,7 +106,7 @@ export function ensureExecutable(workPath: string): void {
 }
 
 export async function downloadMaven(destDir: string): Promise<string> {
-  const url = 'https://dlcdn.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz';
+  const url = 'https://dlcdn.apache.org/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz';
   console.log(`Downloading Maven from ${url}`);
   const mavenDir = join(destDir, 'maven');
   mkdirSync(mavenDir, { recursive: true });

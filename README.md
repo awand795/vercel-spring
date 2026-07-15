@@ -70,7 +70,7 @@ Add the native profile to your `pom.xml`:
 {
   "functions": {
     "api/index.java": {
-      "runtime": "vercel-spring@0.1.3",
+      "runtime": "vercel-spring@0.1.4",
       "memory": 3008,
       "maxDuration": 30
     }
