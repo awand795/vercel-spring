@@ -146,7 +146,23 @@ export async function downloadGradle(destDir: string): Promise<string> {
   return join(gradleDir, 'gradle-8.10');
 }
 
-export async function buildNativeImageMaven(workPath: string, graalHome: string, buildDir?: string): Promise<string> {
+function writeNativeImageProps(targetClassesDir: string, hasH2: boolean): void {
+  if (!existsSync(targetClassesDir)) {
+    mkdirSync(targetClassesDir, { recursive: true });
+  }
+  const dir = join(targetClassesDir, 'META-INF', 'native-image', 'vercel-spring');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, 'native-image.properties');
+
+  let args = '--gc=G1 -J-Xmx2g --parallelism=2 --enable-url-protocols=http -H:+ReportExceptionStackTraces';
+  if (hasH2) {
+    args += ' --exclude-config=.*h2.*,META-INF/native-image/.*';
+  }
+  writeFileSync(file, `Args = ${args}\n`);
+  console.log('Native-image config written to', file);
+}
+
+export async function buildNativeImageMaven(workPath: string, graalHome: string, hasH2: boolean, buildDir?: string): Promise<string> {
   const env = {
     ...process.env,
     JAVA_HOME: graalHome,
@@ -163,11 +179,13 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string,
     mvnCmd = join(mavenHome, 'bin', 'mvn');
   }
 
-  const nativeArgs = '--gc=G1 -J-Xmx2g --parallelism=2 --enable-url-protocols=http -H:+ReportExceptionStackTraces';
+  const targetClasses = join(workPath, 'target', 'classes');
+  writeNativeImageProps(targetClasses, hasH2);
+
   console.log('Building Spring Boot native image with Maven...');
   console.log('This may take 5-15 minutes depending on project size and Vercel build resources.');
   try {
-    execSync(`"${mvnCmd}" -Pnative native:compile -DskipTests "-Dnative.build.args=${nativeArgs}"`, {
+    execSync(`"${mvnCmd}" -Pnative native:compile -DskipTests`, {
       cwd: workPath,
       env,
       stdio: 'inherit',
@@ -175,7 +193,7 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string,
     });
   } catch (err: any) {
     console.error('Maven native build failed. Common causes:');
-    console.error('  - Out of memory (add --gc=G1 -J-Xmx3g to native-image args)');
+    console.error('  - Out of memory');
     console.error('  - Build timeout (try simplifying your project or increasing timeout)');
     console.error('  - Check your pom.xml native profile configuration');
     throw new Error(`Maven native build failed: ${err.message || err}`);
@@ -192,7 +210,7 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string,
   throw new Error('Native binary not found in target/ directory');
 }
 
-export async function buildNativeImageGradle(workPath: string, graalHome: string, buildDir?: string): Promise<string> {
+export async function buildNativeImageGradle(workPath: string, graalHome: string, hasH2: boolean, buildDir?: string): Promise<string> {
   const env = {
     ...process.env,
     JAVA_HOME: graalHome,
@@ -209,6 +227,9 @@ export async function buildNativeImageGradle(workPath: string, graalHome: string
     gradleCmd = join(gradleHome, 'bin', 'gradle');
   }
 
+  const classesDir = join(workPath, 'build', 'classes', 'java', 'main');
+  writeNativeImageProps(classesDir, hasH2);
+
   console.log('Building Spring Boot native image with Gradle...');
   console.log('This may take 5-15 minutes depending on project size and Vercel build resources.');
   try {
@@ -220,7 +241,7 @@ export async function buildNativeImageGradle(workPath: string, graalHome: string
     });
   } catch (err: any) {
     console.error('Gradle native build failed. Common causes:');
-    console.error('  - Out of memory (add --gc=G1 -J-Xmx3g to native-image args)');
+    console.error('  - Out of memory');
     console.error('  - Build timeout (try simplifying your project or increasing timeout)');
     throw new Error(`Gradle native build failed: ${err.message || err}`);
   }
@@ -256,30 +277,10 @@ function detectH2Dependency(workPath: string): boolean {
   return false;
 }
 
-function writeH2NativeImageExclude(workPath: string): void {
-  const dir = join(workPath, 'src', 'main', 'resources', 'META-INF', 'native-image', 'vercel-spring-h2-exclude');
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, 'native-image.properties');
-  writeFileSync(file, 'Args = --exclude-config=.*h2.*,META-INF/native-image/.*\n');
-  console.log('H2 detected: added native-image exclude config at', file);
-}
-
-function writePerformanceNativeImageConfig(workPath: string): void {
-  const dir = join(workPath, 'src', 'main', 'resources', 'META-INF', 'native-image', 'vercel-spring-performance');
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, 'native-image.properties');
-  const content = 'Args = --gc=G1 -J-Xmx3g --parallelism=2 -H:+ReportExceptionStackTraces --enable-url-protocols=http\n';
-  writeFileSync(file, content);
-  console.log('Injected native-image performance tuning config at', file);
-}
-
 export async function buildProjectNative(workPath: string, graalHome: string, buildSystem: BuildSystem, buildDir?: string): Promise<string> {
-  if (detectH2Dependency(workPath)) {
-    writeH2NativeImageExclude(workPath);
-  }
+  const hasH2 = detectH2Dependency(workPath);
   if (buildSystem === 'maven') {
-    return buildNativeImageMaven(workPath, graalHome, buildDir);
+    return buildNativeImageMaven(workPath, graalHome, hasH2, buildDir);
   }
-  writePerformanceNativeImageConfig(workPath);
-  return buildNativeImageGradle(workPath, graalHome, buildDir);
+  return buildNativeImageGradle(workPath, graalHome, hasH2, buildDir);
 }
