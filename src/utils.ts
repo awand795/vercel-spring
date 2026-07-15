@@ -78,16 +78,13 @@ export async function downloadAndExtract(url: string, destDir: string): Promise<
     fileStream.on('error', reject);
   });
 
-  return new Promise<string>((resolve, reject) => {
-    const tar = require('tar') as { extract: (opts: any) => NodeJS.ReadWriteStream };
-    const extractStream = tar.extract({
-      file: tarballPath,
-      cwd: extractDir,
-      strip: 1,
-    });
-    extractStream.on('finish', () => resolve(extractDir));
-    extractStream.on('error', reject);
+  const tar = require('tar');
+  await tar.extract({
+    file: tarballPath,
+    cwd: extractDir,
+    strip: 1,
   });
+  return extractDir;
 }
 
 export async function detectBuildSystem(workPath: string): Promise<BuildSystem | null> {

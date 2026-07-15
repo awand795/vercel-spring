@@ -1,6 +1,6 @@
 {
   "name": "vercel-spring",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Spring runtime for Vercel - deploy Spring Boot apps using GraalVM Native Image",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
