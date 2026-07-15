@@ -146,7 +146,7 @@ export async function downloadGradle(destDir: string): Promise<string> {
   return join(gradleDir, 'gradle-8.10');
 }
 
-function writeNativeImageProps(targetClassesDir: string, hasH2: boolean): void {
+function writeNativeImageProps(targetClassesDir: string): void {
   if (!existsSync(targetClassesDir)) {
     mkdirSync(targetClassesDir, { recursive: true });
   }
@@ -158,14 +158,11 @@ function writeNativeImageProps(targetClassesDir: string, hasH2: boolean): void {
   // --gc=G1 and --parallelism=N are omitted because GraalVM auto-detects optimal
   // defaults for the host JDK 21+ environment.
   let args = '-J-Xmx2g --enable-url-protocols=http -H:+ReportExceptionStackTraces';
-  if (hasH2) {
-    args += ' --exclude-config=.*h2.*,META-INF/native-image/.*';
-  }
   writeFileSync(file, `Args = ${args}\n`);
   console.log('Native-image config written to', file);
 }
 
-export async function buildNativeImageMaven(workPath: string, graalHome: string, hasH2: boolean, buildDir?: string): Promise<string> {
+export async function buildNativeImageMaven(workPath: string, graalHome: string, buildDir?: string): Promise<string> {
   const env = {
     ...process.env,
     JAVA_HOME: graalHome,
@@ -183,7 +180,7 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string,
   }
 
   const targetClasses = join(workPath, 'target', 'classes');
-  writeNativeImageProps(targetClasses, hasH2);
+  writeNativeImageProps(targetClasses);
 
   console.log('Building Spring Boot native image with Maven...');
   console.log('This may take 5-15 minutes depending on project size and Vercel build resources.');
@@ -222,7 +219,7 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string,
   throw new Error('Native binary not found in target/ directory');
 }
 
-export async function buildNativeImageGradle(workPath: string, graalHome: string, hasH2: boolean, buildDir?: string): Promise<string> {
+export async function buildNativeImageGradle(workPath: string, graalHome: string, buildDir?: string): Promise<string> {
   const env = {
     ...process.env,
     JAVA_HOME: graalHome,
@@ -240,7 +237,7 @@ export async function buildNativeImageGradle(workPath: string, graalHome: string
   }
 
   const classesDir = join(workPath, 'build', 'classes', 'java', 'main');
-  writeNativeImageProps(classesDir, hasH2);
+  writeNativeImageProps(classesDir);
 
   console.log('Building Spring Boot native image with Gradle...');
   console.log('This may take 5-15 minutes depending on project size and Vercel build resources.');
@@ -282,26 +279,9 @@ export function readLauncherSource(): string {
   return fs.readFileSync(launcherPath, 'utf-8');
 }
 
-function detectH2Dependency(workPath: string): boolean {
-  const pomXml = join(workPath, 'pom.xml');
-  if (existsSync(pomXml)) {
-    const content = readFileSync(pomXml, 'utf-8');
-    if (/<artifactId>h2<\/artifactId>/.test(content)) return true;
-  }
-  for (const name of ['build.gradle', 'build.gradle.kts']) {
-    const gp = join(workPath, name);
-    if (existsSync(gp)) {
-      const content = readFileSync(gp, 'utf-8');
-      if (/['"]h2['"]/.test(content)) return true;
-    }
-  }
-  return false;
-}
-
 export async function buildProjectNative(workPath: string, graalHome: string, buildSystem: BuildSystem, buildDir?: string): Promise<string> {
-  const hasH2 = detectH2Dependency(workPath);
   if (buildSystem === 'maven') {
-    return buildNativeImageMaven(workPath, graalHome, hasH2, buildDir);
+    return buildNativeImageMaven(workPath, graalHome, buildDir);
   }
-  return buildNativeImageGradle(workPath, graalHome, hasH2, buildDir);
+  return buildNativeImageGradle(workPath, graalHome, buildDir);
 }
