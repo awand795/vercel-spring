@@ -64,9 +64,15 @@
                         <configuration>
                             <imageName>${project.artifactId}</imageName>
                             <buildArgs>
+                                <!--
+                                  NOTE: --no-fallback is intentionally omitted here.
+                                  It causes native-image to fail if ANY reachability
+                                  metadata is missing. For serverless deployment, a
+                                  fallback image is acceptable. If you want strict
+                                  native-only images, add:
+                                    <buildArg>--no-fallback</buildArg>
+                                -->
                                 <buildArg>--enable-url-protocols=http</buildArg>
-                                <buildArg>--no-fallback</buildArg>
-                                <buildArg>--install-exit-handlers</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>

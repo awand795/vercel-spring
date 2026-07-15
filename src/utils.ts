@@ -154,7 +154,10 @@ function writeNativeImageProps(targetClassesDir: string, hasH2: boolean): void {
   mkdirSync(dir, { recursive: true });
   const file = join(dir, 'native-image.properties');
 
-  let args = '--gc=G1 -J-Xmx2g --parallelism=2 --enable-url-protocols=http -H:+ReportExceptionStackTraces';
+  // These args are passed to native-image in addition to any pom.xml <buildArgs>.
+  // --gc=G1 and --parallelism=N are omitted because GraalVM auto-detects optimal
+  // defaults for the host JDK 21+ environment.
+  let args = '-J-Xmx2g --enable-url-protocols=http -H:+ReportExceptionStackTraces';
   if (hasH2) {
     args += ' --exclude-config=.*h2.*,META-INF/native-image/.*';
   }
@@ -188,15 +191,24 @@ export async function buildNativeImageMaven(workPath: string, graalHome: string,
     execSync(`"${mvnCmd}" -Pnative native:compile -DskipTests`, {
       cwd: workPath,
       env,
-      stdio: 'inherit',
+      stdio: ['inherit', 'inherit', 'pipe'],
       timeout: 1800000,
     });
   } catch (err: any) {
+    // Capture the native-image stderr output for better diagnostics
+    const stderrOutput = err.stderr?.toString() || '';
+    if (stderrOutput) {
+      console.error('--- Native-image error output ---');
+      console.error(stderrOutput);
+      console.error('--- End of native-image error ---');
+    }
     console.error('Maven native build failed. Common causes:');
-    console.error('  - Out of memory');
-    console.error('  - Build timeout (try simplifying your project or increasing timeout)');
+    console.error('  - Out of memory (try adjusting -J-Xmx in native-image.properties: increase to 4g if the build runs OOM, or decrease if the build environment is constrained)');
+    console.error('  - Build timeout (try simplifying your project or increasing the timeout)');
+    console.error('  - Missing GraalVM reachability metadata (e.g., @RegisterReflectionForBinding, reflection-config.json)');
     console.error('  - Check your pom.xml native profile configuration');
-    throw new Error(`Maven native build failed: ${err.message || err}`);
+    const detail = stderrOutput ? `\n${stderrOutput.slice(-2000)}` : '';
+    throw new Error(`Maven native build failed: ${err.message || err}${detail}`);
   }
 
   const targetDir = join(workPath, 'target');
@@ -236,14 +248,23 @@ export async function buildNativeImageGradle(workPath: string, graalHome: string
     execSync(`"${gradleCmd}" nativeCompile -x test`, {
       cwd: workPath,
       env,
-      stdio: 'inherit',
+      stdio: ['inherit', 'inherit', 'pipe'],
       timeout: 1800000,
     });
   } catch (err: any) {
+    // Capture the native-image stderr output for better diagnostics
+    const stderrOutput = err.stderr?.toString() || '';
+    if (stderrOutput) {
+      console.error('--- Native-image error output ---');
+      console.error(stderrOutput);
+      console.error('--- End of native-image error ---');
+    }
     console.error('Gradle native build failed. Common causes:');
-    console.error('  - Out of memory');
-    console.error('  - Build timeout (try simplifying your project or increasing timeout)');
-    throw new Error(`Gradle native build failed: ${err.message || err}`);
+    console.error('  - Out of memory (try adjusting -J-Xmx in native-image.properties: increase to 4g if the build runs OOM, or decrease if the build environment is constrained)');
+    console.error('  - Build timeout (try simplifying your project or increasing the timeout)');
+    console.error('  - Missing GraalVM reachability metadata');
+    const detail = stderrOutput ? `\n${stderrOutput.slice(-2000)}` : '';
+    throw new Error(`Gradle native build failed: ${err.message || err}${detail}`);
   }
 
   const nativeDir = join(workPath, 'build', 'native', 'nativeCompile');

@@ -92,8 +92,13 @@ my-spring-app/
                 <configuration>
                     <imageName>${project.artifactId}</imageName>
                     <buildArgs>
+                        <!--
+                          NOTE: --no-fallback is intentionally omitted.
+                          It causes native-image to fail if ANY reachability
+                          metadata is missing. For serverless deployment, a
+                          fallback image is acceptable.
+                        -->
                         <buildArg>--enable-url-protocols=http</buildArg>
-                        <buildArg>--no-fallback</buildArg>
                     </buildArgs>
                 </configuration>
             </plugin>
