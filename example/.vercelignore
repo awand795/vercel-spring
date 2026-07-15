@@ -1,0 +1,7 @@
+.git
+.graalvm/
+node_modules/
+target/
+build/
+*.jar
+*.tar.gz
